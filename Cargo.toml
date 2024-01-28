@@ -2,6 +2,13 @@
 name = "cycle-menu"
 version = "0.1.0"
 edition = "2021"
+authors = ["MnlPhlp <online@philipp-manuel.de>"]
+license = "MIT OR Apache-2.0"
+description = "simple library to create a menu that can be cycled through and shown with custom input/output"
+homepage = "https://github.com/MnlPhlp/cycle-menu"
+repository = "https://github.com/MnlPhlp/cycle-menu"
+keywords = ["menu", "cycle", "embedded"]
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

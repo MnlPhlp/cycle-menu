@@ -66,11 +66,11 @@ impl<'a> Item<'a> {
 pub struct Menu<'a> {
     root: SubMenu<'a>,
     depth: u8,
-    display_text: Box<dyn Fn(&'static str)>,
+    display_text: Box<dyn Fn(&'static str) + 'a>,
 }
 
 impl<'a> Menu<'a> {
-    pub fn new(items: Vec<Item<'a>>, disp: impl Fn(&'static str) + 'static) -> Self {
+    pub fn new(items: Vec<Item<'a>>, disp: impl Fn(&'static str) + 'a) -> Self {
         let menu = Self {
             depth: 0,
             display_text: Box::new(disp),
