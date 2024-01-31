@@ -15,7 +15,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Build std
+	  - uses: actions/checkout@v3
+		- name: Build std
       run: cargo build --verbose
     - name: Build no-std
       run: cargo build --verbose --no-default-features
