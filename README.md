@@ -1,6 +1,6 @@
 # cycle-menu
 
-Simple library to create a menu that can be cycled through and shown with custom input/output.
+Simple no-std compatible library to create a menu that can be cycled through and shown with custom input/output.
 
 The menu object has two functions, next and ok, to controll it.
 When crating the menu a callback is given that is later used to display menu entries.
