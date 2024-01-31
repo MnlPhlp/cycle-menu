@@ -1,84 +1,59 @@
-pub struct Action<'a> {
+#![no_std]
+
+use core::cell::RefCell;
+
+#[derive(Clone)]
+pub enum ItemType<'a> {
+    Action(&'a (dyn Fn() + 'a)),
+    SubItem(&'a RefCell<Item<'a>>),
+    Back(&'a RefCell<Item<'a>>),
+}
+
+#[derive(Clone)]
+pub struct Item<'a> {
     name: &'static str,
-    f: Box<dyn Fn() + 'a>,
-}
-pub struct SubMenu<'a> {
-    name: &'static str,
-    position: u8,
-    items: Vec<Item<'a>>,
-}
-
-impl SubMenu<'_> {
-    fn get_text(&self) -> &'static str {
-        if self.position >= self.items.len() as u8 {
-            &Item::Back.get_name()
-        } else {
-            &self.items[self.position as usize].get_name()
-        }
-    }
-
-    fn get_item(&self) -> &Item {
-        if self.position >= self.items.len() as u8 {
-            &Item::Back
-        } else {
-            &self.items[self.position as usize]
-        }
-    }
-
-    fn go_next(&mut self, no_back: bool) {
-        if no_back {
-            self.position = (self.position + 1) % self.items.len() as u8
-        } else {
-            self.position = (self.position + 1) % (self.items.len() as u8 + 1)
-        }
-    }
-}
-
-pub enum Item<'a> {
-    Action(Action<'a>),
-    SubMenu(SubMenu<'a>),
-    Back,
+    inner: ItemType<'a>,
+    next: Option<&'a RefCell<Item<'a>>>,
 }
 
 impl<'a> Item<'a> {
-    pub fn new_action(name: &'static str, f: impl Fn() + 'a) -> Self {
-        Self::Action(Action {
+    pub fn new_action(name: &'static str, f: &'a (impl Fn() + 'a)) -> RefCell<Self> {
+        RefCell::new(Self {
             name,
-            f: Box::new(f),
+            inner: ItemType::Action(f),
+            next: None,
         })
     }
-    pub fn new_submenu(name: &'static str, items: Vec<Item<'a>>) -> Self {
-        Self::SubMenu(SubMenu {
-            position: 0,
-            name,
-            items,
-        })
-    }
-    fn get_name(&self) -> &'static str {
-        match self {
-            Item::Action(action) => action.name,
-            Item::SubMenu(sub) => sub.name,
-            Item::Back => "Back",
+
+    /// create a new submenu with some items
+    /// panics if the items list is empty
+    pub fn new_submenu(name: &'static str, items: &'a [RefCell<Item<'a>>]) -> RefCell<Self> {
+        if items.is_empty() {
+            panic!("no items given");
         }
+        let root = Self {
+            name,
+            inner: ItemType::SubItem(&items[0]),
+            next: None,
+        };
+        for i in 0..items.len() - 1 {
+            items[i].borrow_mut().next = Some(&items[i + 1]);
+        }
+        RefCell::new(root)
     }
 }
 
 pub struct Menu<'a> {
-    root: SubMenu<'a>,
-    depth: u8,
-    display_text: Box<dyn Fn(&'static str) + 'a>,
+    current: RefCell<Item<'a>>,
+    display_text: &'a (dyn Fn(&'static str) + 'a),
 }
 
 impl<'a> Menu<'a> {
-    pub fn new(items: Vec<Item<'a>>, disp: impl Fn(&'static str) + 'a) -> Self {
+    pub fn new(items: &'a mut [RefCell<Item<'a>>], disp: &'a (impl Fn(&'static str) + 'a)) -> Self {
+        let _ = Item::new_submenu("root", items);
         let menu = Self {
-            depth: 0,
-            display_text: Box::new(disp),
-            root: SubMenu {
-                name: "root",
-                position: 0,
-                items,
-            },
+            current: items[0].clone(),
+            display_text: disp,
         };
         menu.display();
         menu
@@ -86,55 +61,25 @@ impl<'a> Menu<'a> {
 
     /// go forward in the menu
     pub fn skip(&mut self) {
-        let skip_back = self.depth == 0;
-        self.get_submenu_mut().go_next(skip_back);
+        let current = self.current.borrow().clone();
+        if let Some(next) = current.next {
+            self.current = next.clone();
+        }
         self.display();
     }
 
     /// accept current selection
     pub fn ok(&mut self) {
-        let menu = self.get_submenu_mut();
-        let item = menu.get_item();
-        match item {
-            Item::Action(action) => (action.f)(),
-            Item::SubMenu(_) => self.depth += 1,
-            Item::Back => {
-                menu.position = 0;
-                self.depth -= 1;
-            }
+        match self.current.clone().borrow().inner {
+            ItemType::Action(action) => action(),
+            ItemType::SubItem(sub) => self.current = sub.clone(),
+            ItemType::Back(back) => self.current = back.clone(),
         }
 
         self.display();
     }
 
     fn display(&self) {
-        let text = self.get_submenu().get_text();
-        (self.display_text)(text);
-    }
-
-    /// get currently active submenu
-    fn get_submenu(&self) -> &SubMenu {
-        let mut menu = &self.root;
-        for _ in 0..self.depth {
-            if let Item::SubMenu(sub) = &menu.items[menu.position as usize] {
-                menu = sub;
-            } else {
-                panic!("attemped to select sub_menu on wrong item");
-            }
-        }
-        menu
-    }
-
-    /// get currently active submenu mutably
-    fn get_submenu_mut(&mut self) -> &mut SubMenu<'a> {
-        let mut menu = &mut self.root;
-        for _ in 0..self.depth {
-            if let Item::SubMenu(sub) = &mut menu.items[menu.position as usize] {
-                menu = sub;
-            } else {
-                panic!("attemped to select sub_menu on wrong item");
-            }
-        }
-        menu
+        (self.display_text)(self.current.borrow().name);
     }
 }
