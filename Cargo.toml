@@ -10,6 +10,10 @@ repository = "https://github.com/MnlPhlp/cycle-menu"
 keywords = ["menu", "cycle", "embedded"]
 readme = "README.md"
 
+[features]
+# default = ["std"]
+std = []
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

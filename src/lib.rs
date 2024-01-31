@@ -1,15 +1,28 @@
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 use core::cell::RefCell;
 
+#[cfg(not(feature = "std"))]
+mod types {
+    pub type ActionFunc<'a> = &'a (dyn Fn() + 'a);
+    pub type ItemList<'a> = &'a [super::Item<'a>];
+    pub type DispFunc<'a> = &'a (dyn Fn(&'static str) + 'a);
+}
+#[cfg(feature = "std")]
+mod types {
+    pub type ActionFunc<'a> = Box<dyn Fn() + 'a>;
+    pub type ItemList<'a> = Vec<super::Item<'a>>;
+    pub type DispFunc<'a> = Box<dyn Fn(&'static str) + 'a>;
+}
+
 pub struct Action<'a> {
     name: &'static str,
-    f: &'a (dyn Fn() + 'a),
+    f: types::ActionFunc<'a>,
 }
 pub struct SubMenu<'a> {
     name: &'static str,
     position: RefCell<u8>,
-    items: &'a [Item<'a>],
+    items: types::ItemList<'a>,
 }
 
 impl SubMenu<'_> {
@@ -26,12 +39,12 @@ impl SubMenu<'_> {
     }
 
     fn go_next(&self, no_back: bool) {
-        if no_back {
-            *self.position.borrow_mut() = (*self.position.borrow() + 1) % self.items.len() as u8
+        let next_pos = if no_back {
+            (*self.position.borrow() + 1) % self.items.len() as u8
         } else {
-            *self.position.borrow_mut() =
-                (*self.position.borrow() + 1) % (self.items.len() as u8 + 1)
-        }
+            (*self.position.borrow() + 1) % (self.items.len() as u8 + 1)
+        };
+        *self.position.borrow_mut() = next_pos;
     }
 }
 
@@ -42,10 +55,18 @@ pub enum Item<'a> {
 }
 
 impl<'a> Item<'a> {
-    pub fn new_action(name: &'static str, f: &'a (impl Fn() + 'a)) -> Self {
+    #[cfg(not(feature = "std"))]
+    pub fn new_action(name: &'static str, f: types::ActionFunc<'a>) -> Self {
         Self::Action(Action { name, f })
     }
-    pub fn new_submenu(name: &'static str, items: &'a [Item<'a>]) -> Self {
+    #[cfg(feature = "std")]
+    pub fn new_action(name: &'static str, f: impl Fn() + 'a) -> Self {
+        Self::Action(Action {
+            name,
+            f: Box::new(f),
+        })
+    }
+    pub fn new_submenu(name: &'static str, items: types::ItemList<'a>) -> Self {
         Self::SubMenu(SubMenu {
             position: RefCell::new(0),
             name,
@@ -64,14 +85,23 @@ impl<'a> Item<'a> {
 pub struct Menu<'a> {
     root: SubMenu<'a>,
     depth: u8,
-    display_text: &'a (dyn Fn(&'static str) + 'a),
+    disp: types::DispFunc<'a>,
 }
 
 impl<'a> Menu<'a> {
-    pub fn new(items: &'a [Item<'a>], disp: &'a (impl Fn(&'static str) + 'a)) -> Self {
+    #[cfg(not(feature = "std"))]
+    pub fn new(items: types::ItemList<'a>, disp: types::DispFunc<'a>) -> Self {
+        Self::inner_new(items, disp)
+    }
+    #[cfg(feature = "std")]
+    pub fn new(items: types::ItemList<'a>, disp: impl Fn(&'static str) + 'a) -> Self {
+        Self::inner_new(items, Box::new(disp))
+    }
+
+    fn inner_new(items: types::ItemList<'a>, disp: types::DispFunc<'a>) -> Self {
         let menu = Self {
+            disp,
             depth: 0,
-            display_text: disp,
             root: SubMenu {
                 name: "root",
                 position: RefCell::new(0),
@@ -107,7 +137,7 @@ impl<'a> Menu<'a> {
 
     fn display(&self) {
         let text = self.get_submenu().get_text();
-        (self.display_text)(text);
+        (self.disp)(text);
     }
 
     /// get currently active submenu
