@@ -7,15 +7,15 @@ use core::cell::RefCell;
 
 #[cfg(not(feature = "std"))]
 mod types {
-    pub type ActionFunc<'a> = &'a (dyn Fn() + 'a);
+    pub type ActionFunc<'a> = &'a (dyn Fn() + 'a + Send);
     pub type ItemList<'a> = &'a [super::Item<'a>];
-    pub type DispFunc<'a> = &'a (dyn Fn(&'static str) + 'a);
+    pub type DispFunc<'a> = &'a (dyn Fn(&'static str) + 'a + Send);
 }
 #[cfg(feature = "std")]
 mod types {
-    pub type ActionFunc<'a> = Box<dyn Fn() + 'a>;
+    pub type ActionFunc<'a> = Box<dyn Fn() + 'a + Send>;
     pub type ItemList<'a> = Vec<super::Item<'a>>;
-    pub type DispFunc<'a> = Box<dyn Fn(&'static str) + 'a>;
+    pub type DispFunc<'a> = Box<dyn Fn(&'static str) + 'a + Send>;
 }
 
 pub struct Action<'a> {
@@ -63,7 +63,7 @@ impl<'a> Item<'a> {
         Self::Action(Action { name, f })
     }
     #[cfg(feature = "std")]
-    pub fn new_action(name: &'static str, f: impl Fn() + 'a) -> Self {
+    pub fn new_action(name: &'static str, f: impl Fn() + 'a + Send) -> Self {
         Self::Action(Action {
             name,
             f: Box::new(f),
@@ -97,7 +97,7 @@ impl<'a> Menu<'a> {
         Self::inner_new(items, disp)
     }
     #[cfg(feature = "std")]
-    pub fn new(items: types::ItemList<'a>, disp: impl Fn(&'static str) + 'a) -> Self {
+    pub fn new(items: types::ItemList<'a>, disp: impl Fn(&'static str) + 'a + Send) -> Self {
         Self::inner_new(items, Box::new(disp))
     }
 
