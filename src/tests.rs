@@ -1,38 +1,46 @@
-use core::cell::RefCell;
+use core::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
 use crate::{Item, Menu};
 
 #[cfg(feature = "std")]
 #[test]
 fn test_std() {
-    let counter1 = &RefCell::new(0);
-    let counter2 = &RefCell::new(0);
-    let flag = &RefCell::new(false);
+    let counter1 = AtomicI32::new(0);
+    let counter2 = AtomicI32::new(0);
+    let flag = AtomicBool::new(false);
     let menu = Menu::new(
         vec![
             Item::new_submenu(
                 "sub",
                 vec![
-                    Item::new_action("counter1", || *counter1.borrow_mut() += 1),
-                    Item::new_action("counter2", || *counter2.borrow_mut() += 1),
+                    Item::new_action("counter1", || {
+                        counter1.fetch_add(1, Ordering::Relaxed);
+                    }),
+                    Item::new_action("counter2", || {
+                        counter2.fetch_add(1, Ordering::Relaxed);
+                    }),
                 ],
             ),
-            Item::new_action("flag", || *flag.borrow_mut() = true),
+            Item::new_action("flag", || flag.store(true, Ordering::Relaxed)),
         ],
         |_| {},
     );
-    test_menu(menu, flag, counter1, counter2);
+    test_menu(menu, &flag, &counter1, &counter2);
 }
 
 #[cfg(not(feature = "std"))]
 #[test]
 fn test_no_std() {
-    let counter1 = &RefCell::new(0);
-    let counter1_func = || *counter1.borrow_mut() += 1;
-    let counter2 = &RefCell::new(0);
-    let counter2_func = || *counter2.borrow_mut() += 1;
-    let flag = &RefCell::new(false);
-    let flag_func = || *flag.borrow_mut() = true;
+    let counter1 = AtomicI32::new(0);
+    let counter1_func = || {
+        counter1.fetch_add(1, Ordering::Relaxed);
+    };
+    let counter2 = AtomicI32::new(0);
+    let counter2_func = || {
+        counter2.fetch_add(1, Ordering::Relaxed);
+    };
+    let flag = AtomicBool::new(false);
+    let flag_func = || flag.store(true, Ordering::Relaxed);
 
     let sub_items = [
         Item::new_action("counter1", &counter1_func),
@@ -43,15 +51,10 @@ fn test_no_std() {
         Item::new_action("flag", &flag_func),
     ];
     let menu = Menu::new(&items, &|_| {});
-    test_menu(menu, flag, counter1, counter2);
+    test_menu(menu, &flag, &counter1, &counter2);
 }
 
-fn test_menu(
-    mut menu: Menu,
-    flag: &RefCell<bool>,
-    counter1: &RefCell<i32>,
-    counter2: &RefCell<i32>,
-) {
+fn test_menu(mut menu: Menu, flag: &AtomicBool, counter1: &AtomicI32, counter2: &AtomicI32) {
     // go into sub
     menu.ok();
     // skip to counter 2
@@ -69,7 +72,7 @@ fn test_menu(
     menu.ok();
     // trigger counter 1
     menu.ok();
-    assert!(*flag.borrow(), "falg not set");
-    assert_eq!(*counter1.borrow(), 1, "counter 1 wrong");
-    assert_eq!(*counter2.borrow(), 1, "counter 2 wrong");
+    assert!(flag.load(Ordering::Relaxed), "falg not set");
+    assert_eq!(counter1.load(Ordering::Relaxed), 1, "counter 1 wrong");
+    assert_eq!(counter2.load(Ordering::Relaxed), 1, "counter 2 wrong");
 }
