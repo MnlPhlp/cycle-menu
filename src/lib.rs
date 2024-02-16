@@ -9,27 +9,29 @@ use core::cell::RefCell;
 mod types {
     pub type ActionFunc<'a> = &'a (dyn Fn() + 'a + Send);
     pub type ItemList<'a> = &'a [super::Item<'a>];
-    pub type DispFunc<'a> = &'a (dyn Fn(&'static str) + 'a + Send);
+    pub type DispFunc<'a> = &'a (dyn Fn(Name) + 'a + Send);
+    pub type Name = &'static str;
 }
 #[cfg(feature = "std")]
 mod types {
     pub type ActionFunc<'a> = Box<dyn Fn() + 'a + Send>;
     pub type ItemList<'a> = Vec<super::Item<'a>>;
-    pub type DispFunc<'a> = Box<dyn Fn(&'static str) + 'a + Send>;
+    pub type DispFunc<'a> = Box<dyn Fn(Name) + 'a + Send>;
+    pub type Name = String;
 }
 
 pub struct Action<'a> {
-    name: &'static str,
+    name: types::Name,
     f: types::ActionFunc<'a>,
 }
 pub struct SubMenu<'a> {
-    name: &'static str,
+    name: types::Name,
     position: RefCell<u8>,
     items: types::ItemList<'a>,
 }
 
 impl SubMenu<'_> {
-    fn get_text(&self) -> &'static str {
+    fn get_text(&self) -> types::Name {
         self.get_item().get_name()
     }
 
@@ -59,28 +61,28 @@ pub enum Item<'a> {
 
 impl<'a> Item<'a> {
     #[cfg(not(feature = "std"))]
-    pub fn new_action(name: &'static str, f: types::ActionFunc<'a>) -> Self {
+    pub fn new_action(name: types::Name, f: types::ActionFunc<'a>) -> Self {
         Self::Action(Action { name, f })
     }
     #[cfg(feature = "std")]
-    pub fn new_action(name: &'static str, f: impl Fn() + 'a + Send) -> Self {
+    pub fn new_action(name: impl Into<types::Name>, f: impl Fn() + 'a + Send) -> Self {
         Self::Action(Action {
-            name,
+            name: name.into(),
             f: Box::new(f),
         })
     }
-    pub fn new_submenu(name: &'static str, items: types::ItemList<'a>) -> Self {
+    pub fn new_submenu(name: impl Into<types::Name>, items: types::ItemList<'a>) -> Self {
         Self::SubMenu(SubMenu {
             position: RefCell::new(0),
-            name,
+            name: name.into(),
             items,
         })
     }
-    fn get_name(&self) -> &'static str {
+    fn get_name(&self) -> types::Name {
         match self {
-            Item::Action(action) => action.name,
-            Item::SubMenu(sub) => sub.name,
-            Item::Back => "Back",
+            Item::Action(action) => action.name.clone(),
+            Item::SubMenu(sub) => sub.name.clone(),
+            Item::Back => "Back".into(),
         }
     }
 }
@@ -97,7 +99,7 @@ impl<'a> Menu<'a> {
         Self::inner_new(items, disp)
     }
     #[cfg(feature = "std")]
-    pub fn new(items: types::ItemList<'a>, disp: impl Fn(&'static str) + 'a + Send) -> Self {
+    pub fn new(items: types::ItemList<'a>, disp: impl Fn(types::Name) + 'a + Send) -> Self {
         Self::inner_new(items, Box::new(disp))
     }
 
@@ -106,7 +108,7 @@ impl<'a> Menu<'a> {
             disp,
             depth: 0,
             root: SubMenu {
-                name: "root",
+                name: "root".into(),
                 position: RefCell::new(0),
                 items,
             },
