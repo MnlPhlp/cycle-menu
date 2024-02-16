@@ -23,11 +23,15 @@ mod types {
 pub struct Action<'a> {
     name: types::Name,
     f: types::ActionFunc<'a>,
+    #[cfg(feature = "std")]
+    show_active: Option<Box<dyn Fn() -> bool + 'a + Send>>,
 }
 pub struct SubMenu<'a> {
     name: types::Name,
     position: RefCell<u8>,
     items: types::ItemList<'a>,
+    #[cfg(feature = "std")]
+    show_active: Option<Box<dyn Fn() -> bool + 'a + Send>>,
 }
 
 impl SubMenu<'_> {
@@ -69,21 +73,56 @@ impl<'a> Item<'a> {
         Self::Action(Action {
             name: name.into(),
             f: Box::new(f),
+            show_active: None,
         })
     }
     pub fn new_submenu(name: impl Into<types::Name>, items: types::ItemList<'a>) -> Self {
         Self::SubMenu(SubMenu {
             position: RefCell::new(0),
             name: name.into(),
+            #[cfg(feature = "std")]
+            show_active: None,
             items,
         })
     }
+    #[cfg(feature = "std")]
+    pub fn show_active(mut self, check_active: impl Fn() -> bool + 'a + Send) -> Self {
+        match &mut self {
+            Item::Action(action) => action.show_active = Some(Box::new(check_active)),
+            Item::SubMenu(sub) => sub.show_active = Some(Box::new(check_active)),
+            Item::Back => {}
+        }
+        self
+    }
+    #[cfg(feature = "std")]
     fn get_name(&self) -> types::Name {
         match self {
-            Item::Action(action) => action.name.clone(),
-            Item::SubMenu(sub) => sub.name.clone(),
+            Item::Action(action) => get_text(
+                &action.name,
+                action.show_active.as_ref().is_some_and(|f| f()),
+            ),
+            Item::SubMenu(sub) => {
+                get_text(&sub.name, sub.show_active.as_ref().is_some_and(|f| f()))
+            }
             Item::Back => "Back".into(),
         }
+    }
+    #[cfg(not(feature = "std"))]
+    fn get_name(&self) -> types::Name {
+        match self {
+            Item::Action(action) => action.name,
+            Item::SubMenu(sub) => sub.name,
+            Item::Back => "Back".into(),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+fn get_text(name: &str, active: bool) -> String {
+    if active {
+        format!("* {name} *")
+    } else {
+        name.into()
     }
 }
 
@@ -110,6 +149,8 @@ impl<'a> Menu<'a> {
             root: SubMenu {
                 name: "root".into(),
                 position: RefCell::new(0),
+                #[cfg(feature = "std")]
+                show_active: None,
                 items,
             },
         };
